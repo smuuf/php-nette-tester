@@ -126,6 +126,7 @@ Options:
     --colors [1|0]               Enable or disable colors.
     --coverage <path>            Generate code coverage report to file.
     --coverage-src <path>        Path to source code.
+    --coverage-exclude <glob>    Exclude paths from coverage.
     -h | --help                  This help.
 
 XX
@@ -138,6 +139,7 @@ XX
 			'--debug' => [],
 			'--cider' => [],
 			'--coverage-src' => [CommandLine::REALPATH => true, CommandLine::REPEATABLE => true],
+			'--coverage-exclude' => [CommandLine::REPEATABLE => true],
 			'-o' => [CommandLine::REPEATABLE => true, CommandLine::NORMALIZER => function ($arg) use (&$outputFiles) {
 				[$format, $file] = explode(':', $arg, 2) + [1 => null];
 
@@ -288,11 +290,29 @@ XX
 			$runner->addPhpIniOption('xdebug.mode', ltrim(ini_get('xdebug.mode') . ',coverage', ','));
 		}
 
-		if ($engine === CodeCoverage\Collector::ENGINE_PCOV && count($this->options['--coverage-src'])) {
-			$runner->addPhpIniOption('pcov.directory', Helpers::findCommonDirectory($this->options['--coverage-src']));
+		if ($engine === CodeCoverage\Collector::ENGINE_PCOV) {
+			if (count($this->options['--coverage-src'])) {
+				$runner->addPhpIniOption('pcov.directory', Helpers::findCommonDirectory($this->options['--coverage-src']));
+			}
+			if (count($this->options['--coverage-exclude'])) {
+				$runner->addPhpIniOption(
+					'pcov.exclude',
+					Helpers::joinRegexes(array_map(
+						[Helpers::class, 'globToRegex'],
+						$this->options['--coverage-exclude']
+					))
+				);
+			}
 		}
 
 		echo "Code coverage by $engine: $file\n";
+		if ($this->options['--coverage-exclude']) {
+			printf(
+				"Code coverage excluding: %s\n",
+				implode(', ', $this->options['--coverage-exclude'])
+			);
+		}
+
 		return $file;
 	}
 
@@ -309,8 +329,16 @@ XX
 		}
 
 		$generator = pathinfo($file, PATHINFO_EXTENSION) === 'xml'
-			? new CodeCoverage\Generators\CloverXMLGenerator($file, $this->options['--coverage-src'])
-			: new CodeCoverage\Generators\HtmlGenerator($file, $this->options['--coverage-src']);
+			? new CodeCoverage\Generators\CloverXMLGenerator(
+				$file,
+				$this->options['--coverage-src'],
+				$this->options['--coverage-exclude']
+			)
+			: new CodeCoverage\Generators\HtmlGenerator(
+				$file,
+				$this->options['--coverage-src'],
+				$this->options['--coverage-exclude']
+			);
 		$generator->render($file);
 		echo round($generator->getCoveredPercent()) . "% covered\n";
 	}

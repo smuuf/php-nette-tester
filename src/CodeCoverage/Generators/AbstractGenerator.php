@@ -31,6 +31,20 @@ abstract class AbstractGenerator
 	/** @var array */
 	protected $sources;
 
+	/**
+	 * List of glob-like patterns specifying paths to exclude from code coverage.
+	 *
+	 * @var array<string>
+	 */
+	protected $exclude;
+
+	/**
+	 * List of filepaths that actually were excluded from code coverage.
+	 *
+	 * @var array<string>
+	 */
+	protected $excluded = [];
+
 	/** @var int */
 	protected $totalSum = 0;
 
@@ -42,7 +56,7 @@ abstract class AbstractGenerator
 	 * @param  string  $file  path to coverage.dat file
 	 * @param  array   $sources  paths to covered source files or directories
 	 */
-	public function __construct(string $file, array $sources = [])
+	public function __construct(string $file, array $sources = [], array $exclude = [])
 	{
 		if (!is_file($file)) {
 			throw new \Exception("File '$file' is missing.");
@@ -69,6 +83,8 @@ abstract class AbstractGenerator
 		}
 
 		$this->sources = array_map('realpath', $sources);
+		$this->exclude = $exclude;
+
 	}
 
 
@@ -115,9 +131,27 @@ abstract class AbstractGenerator
 			);
 		}
 
-		return new \CallbackFilterIterator($iterator, function (\SplFileInfo $file): bool {
-			return $file->getBasename()[0] !== '.'  // . or .. or .gitignore
-				&& in_array($file->getExtension(), $this->acceptFiles, true);
+		$excludePattern = Helpers::joinRegexes(array_map(
+			[Helpers::class, 'globToRegex'],
+			$this->exclude
+		));
+
+		return new \CallbackFilterIterator($iterator, function (\SplFileInfo $file) use ($excludePattern): bool {
+			$acceptedExt = in_array($file->getExtension(), $this->acceptFiles, true);
+			if (!$acceptedExt) {
+				return false;
+			}
+
+			// Track excluding of really only those files that have accepted
+			// file extensions.
+			$realpath = $file->getRealPath();
+			$exclude = $this->exclude && preg_match($excludePattern, $realpath);
+			if ($exclude) {
+				$this->excluded[] = $realpath;
+				return false;
+			}
+
+			return $file->getBasename()[0] !== '.';  // . or .. or .gitignore
 		});
 	}
 

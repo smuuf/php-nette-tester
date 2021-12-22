@@ -34,9 +34,9 @@ class HtmlGenerator extends AbstractGenerator
 	 * @param  string  $file  path to coverage.dat file
 	 * @param  array   $sources  files/directories
 	 */
-	public function __construct(string $file, array $sources = [], ?string $title = null)
+	public function __construct(string $file, array $sources = [], array $exclude = [], ?string $title = null)
 	{
-		parent::__construct($file, $sources);
+		parent::__construct($file, $sources, $exclude);
 		$this->title = $title;
 	}
 
@@ -49,6 +49,7 @@ class HtmlGenerator extends AbstractGenerator
 		$title = $this->title;
 		$classes = self::CLASSES;
 		$files = $this->files;
+		$excluded = $this->excluded;
 		$coveredPercent = $this->getCoveredPercent();
 
 		include __DIR__ . '/template.phtml';
@@ -107,6 +108,12 @@ class HtmlGenerator extends AbstractGenerator
 				'total' => $total,
 				'class' => $light ? 'light' : ($loaded ? null : 'not-loaded'),
 			];
+		}
+
+		// The list of excluded files is populated during iteration of
+		// $this->getSourceIterator() above this.
+		foreach ($this->excluded as &$excludedFile) {
+			$excludedFile = str_replace($commonSourcesPath, '', $excludedFile);
 		}
 	}
 }

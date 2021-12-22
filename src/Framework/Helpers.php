@@ -130,4 +130,55 @@ class Helpers
 			? '"' . str_replace('"', '""', $s) . '"'
 			: escapeshellarg($s);
 	}
+
+	/**
+	 * Convert basic glob pattern to regex pattern - without delimiters.
+	 *
+	 * - "?" matches exactly one character except "/" ("\" on Windows)
+	 * - "*" matches zero or more characters except "/" ("\" on Windows)
+	 * - "**" matches anything including "/" ("\" on Windows)
+	 *
+	 * @internal
+	 */
+	public static function globToRegex(string $s): string
+	{
+		static $mapping = null;
+		static $ds = null;
+
+		$ds = $ds ?? preg_quote(DIRECTORY_SEPARATOR);
+		$mapping = $mapping
+			?? [
+				preg_quote('?') => "[^{$ds}]",
+				preg_quote('**') => ".*",
+				preg_quote('*') => "[^{$ds}]*",
+			];
+
+		// preg_quote() everything to remove special meaning of possibly present
+		// regex chars.
+		$tmp = preg_quote($s);
+
+		// Convert basic glob structures to regex.
+		$tmp = strtr($tmp, $mapping);
+
+		return $tmp;
+	}
+
+	/**
+	 * Join multiple regex patterns to a single OR-based preg_*-compatible
+	 * regex pattern - with delimiters.
+	 *
+	 * NOTE: '\x07' (ascii bell) is a valid delimiter for preg_* functions -
+	 * and is used to minimize risk of clashes with contents of regexes passed
+	 * into this function.
+	 *
+	 * @param array<string> $patterns
+	 * @internal
+	 */
+	public static function joinRegexes(array $patterns): string
+	{
+		return sprintf(
+			"\x07((%s))\x07",
+			implode(')|(', $patterns)
+		);
+	}
 }
